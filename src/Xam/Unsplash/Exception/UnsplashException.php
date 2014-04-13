@@ -1,5 +1,5 @@
 <?php
-namespace Unsplash\Exception;
+namespace Xam\Unsplash\Exception;
 /*
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
