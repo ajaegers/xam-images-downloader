@@ -9,6 +9,8 @@ namespace Xam\Unsplash\Downloader;
 
 class ImageDownloader {
 
+    const DIR = '../downloads/unsplash/'; // default destination directory relative to /bin dir
+
     /**
      *
      * @var type 
@@ -20,7 +22,6 @@ class ImageDownloader {
      * @var string 
      */
     private $path;
-
 
     /**
      * 
@@ -77,22 +78,68 @@ class ImageDownloader {
         return $return;
     }
 
+
+    /**
+     * 
+     * @param \DOMDocument $document
+     * @param type $path
+     */
+    public function getImageCaptions(\DOMDocument $document, $path = '//photo-caption') {
+        $finder = new \DomXPath($document);
+        $return = array();
+
+        $nodes = $finder->query($path);
+        foreach ($nodes AS $node) {
+            $return[] = $node->nodeValue;
+        }
+        return $return;
+    }
+
+    /**
+     * 
+     * @param \DOMDocument $document
+     * @param type $path
+     */
+    public function getPosts(\DOMDocument $document, $path = '//post') {
+        $finder = new \DomXPath($document);
+        $return = array();
+
+        $nodes = $finder->query($path);
+        foreach ($nodes AS $node) {
+            $return[] = $node;
+        }
+        return $return;
+    }
+
     /**
      * 
      * @param type $from
      * @param type $to
+     * @param type $fileName
      */
-    public function download($src, $downloadDirectory) {
+    public function download($src, $downloadDirectory, $fileName) {
         if (!file_exists($downloadDirectory)) {
-            throw new \Unsplash\Exception\UnsplashException($downloadDirectory . ' does not exist');
+            throw new \Xam\Unsplash\Exception\UnsplashException($downloadDirectory . ' does not exist');
         }
-        $temp = $downloadDirectory . '/' . uniqid();
+
+        if($fileName){
+            $fileName = $this->hyphenize($fileName);
+        }
+        else {
+            $fileName = uniqid();
+        }
+
+        $fileName   = $fileName. '.jpg';
+        $file       = $downloadDirectory . '/' . $fileName;
+
+        if(file_exists($file)) { // download only new files
+            return 'Exists: '.$fileName;
+        }
+
         $response = $this->getClient()->get($src)
-                ->setResponseBody($temp)
+                ->setResponseBody($file)
                 ->send();
-        
-        $toFile = $downloadDirectory . '/' . basename($response->getEffectiveUrl());
-        rename($temp, $toFile);
+        return 'New:    '.$fileName;
     }
 
     public function getClient() {
@@ -139,6 +186,22 @@ class ImageDownloader {
     public function setPath($path) {
         $this->path = $path;
         return $this;
+    }
+
+    /**
+     * Hyphenize a string
+     * @param string $string
+     * @return string
+     */
+    public function hyphenize($string) {
+        return 
+            strtolower(
+              preg_replace(
+                    array('#[\\s-]+#', '#[^A-Za-z0-9\. -]+#', '#-+#'),
+                    array('-', '', '-'),
+                      strip_tags(urldecode($string))
+                )
+            );
     }
 
 }

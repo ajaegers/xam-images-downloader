@@ -1,3 +1,4 @@
 nbproject
 vendor
-downloads
+*.sublime-project
+*.sublime-workspace

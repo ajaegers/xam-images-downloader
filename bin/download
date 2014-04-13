@@ -10,40 +10,93 @@ use Symfony\Component\Console\Output\OutputInterface;
 
 $console = new Application();
 
+/*
+ * Unsplash downloader
+ * @usage: php download unsplash [optionnal destination directory]
+ */
 $console
-        ->register('ls')
+        ->register('unsplash')
         ->setDefinition(array(
-            new InputArgument('dir', InputArgument::REQUIRED, 'Directory name'),
+            new InputArgument('dir', InputArgument::OPTIONAL, 'Destination directory relative to /bin directory'),
+            new InputOption('latest', null, InputOption::VALUE_NONE, 'If set, will download only latest 100 files'),
+            new InputOption('test', null, InputOption::VALUE_NONE, 'If set, will limit download and other things to test script'),
         ))
-        ->setDescription('Downloads High Resolution Images By Upstream')
+        ->setDescription('Downloads images from Unsplash.com')
         ->setCode(function (InputInterface $input, OutputInterface $output) use($console) {
 
-                    $downloadDirectory = $input->getArgument('dir');
-                    $downloader = new \Xam\Unsplash\Downloader\ImageDownloader();
+                    $downloader         = new \Xam\Unsplash\Downloader\ImageDownloader();
+                    $dir                = $downloader::DIR;
+                    if($input->getArgument('dir')) {
+                        $dir            = $input->getArgument('dir');
+                    }
+                    $downloadDirectory  = realpath(getcwd().'/'.$dir);
+
+                    if(!is_dir($downloadDirectory)){
+                         $output->writeln('<error> Error, '. $dir . ' is not a directory. Please verify your input dir.</error>');
+                         return false;
+                    }
+
+                    // Output some info
+                    $output->writeln('Current directory:     ' . getcwd());
+                    $output->writeln('Destination directory: ' . $downloadDirectory);
+
+                    // Set http client
                     $downloader->setClient(new Guzzle\Http\Client());
 
-                    $total = $downloader->setPath('http://unsplash.com/api/read')->getTotal();
-                    $progress = $console->getHelperSet()->get('progress');
 
+                    // Parse remote file to get total files
+                    $output->write('Retrieving info from http://unsplash.com/api/read...');
+                    $total          = $downloader->setPath('http://unsplash.com/api/read')->getTotal();
+                    $totalDefault   = $total;
+                    $output->writeln('OK');
+
+                    //
+                    // Set options limitations
+                    if($input->getOption('latest')){
+                        $total = 100;
+                    }
+                    if($input->getOption('test')){
+                        $total = 1;
+                    }
+
+                    $output->writeln('Getting '.$total.'/'.$totalDefault.' files...');
+
+                    $progress = $console->getHelperSet()->get('progress');
                     $progress->start($output, $total);
+
                     $start = 0;
                     while ($start < $total) {
 
-                        $document = $downloader->getDocument($start);
-                        $images = $downloader->getImageUrls($document);
-                        foreach ($images AS $imageUrl) {
-
-                            $start++;
-                            try {
-                                $downloader->download($imageUrl, $downloadDirectory);
-                            } catch (\Exception $e) {
-                                $output->writeln('<error>Could not download ' . $imageUrl . '</error>');
+                        $document   = $downloader->getDocument($start);
+                        $posts      = $downloader->getPosts($document);
+                        $images     = $downloader->getImageUrls($document);
+                        foreach ($images as  $key => $imageUrl) {
+                            if($start >= $total){
+                                break;
                             }
+
+                            $message = null;
+                            $start++;
+
+                            try {
+                                $post       = $posts[$key];
+                                $toName     = $post->getAttribute('id').'-'.$post->getAttribute('slug');
+                                $message    = $downloader->download($imageUrl, $downloadDirectory, $toName);
+                            } catch (\Exception $e) {
+                                $output->writeln('<error> ' . $imageUrl . '. '.$e->getMessage().'</error>');
+                            }
+
                             $progress->advance();
+                            if($message){
+                                 $output->writeln('<info> ' . $message . '</info>');
+                            }
+
+
                         }
                     }
 
                     $progress->finish();
+                    $output->writeln('Download finished. Enjoy!');
                     return true;
                 });
 
